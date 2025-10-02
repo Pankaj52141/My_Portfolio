@@ -36,10 +36,16 @@ const Navbar = ({ onNavigate }: NavbarProps) => {
     setActiveSection(sectionId);
     if (sectionId === 'redlab') {
       navigate('/redlab');
+      setIsOpen(false);
     } else {
       onNavigate(sectionId);
+      // Add delay before closing menu for mobile scroll
+      if (window.innerWidth < 768) {
+        setTimeout(() => setIsOpen(false), 400);
+      } else {
+        setIsOpen(false);
+      }
     }
-    setIsOpen(false);
   };
 
   const handleDownloadCV = () => {
