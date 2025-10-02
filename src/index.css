@@ -1,0 +1,248 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Cosmic Black Premium Theme - Galaxy Inspired
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    /* Deep cosmic black base colors */
+    --background: 240 10% 3%;
+    --foreground: 0 0% 100%;
+
+    /* Bright glass card colors */
+    --card: 240 8% 12%;
+    --card-foreground: 0 0% 100%;
+    --card-border: 240 8% 25% / 0.6;
+
+    /* Vibrant cosmic accent colors */
+    --primary: 260 70% 65%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 260 80% 75%;
+
+    --secondary: 180 60% 60%;
+    --secondary-foreground: 240 10% 5%;
+    --secondary-glow: 180 70% 70%;
+
+    --accent: 240 60% 65%;
+    --accent-foreground: 0 0% 100%;
+    --accent-glow: 240 70% 75%;
+
+    /* UI element colors */
+    --muted: 240 8% 18%;
+    --muted-foreground: 0 0% 85%;
+
+    --popover: 240 8% 12% / 0.98;
+    --popover-foreground: 0 0% 100%;
+
+    --border: 240 8% 28% / 0.7;
+    --input: 240 8% 15% / 0.9;
+    --ring: 260 70% 65%;
+
+    --destructive: 0 70% 65%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Vibrant cosmic gradient definitions */
+    --gradient-cosmic: radial-gradient(ellipse at top, hsl(260, 70%, 20%) 0%, hsl(240, 10%, 4%) 50%);
+    --gradient-starfield: 
+      radial-gradient(2px 2px at 20% 30%, hsl(260, 70%, 80%), transparent),
+      radial-gradient(2px 2px at 60% 70%, hsl(180, 60%, 80%), transparent),
+      radial-gradient(1px 1px at 50% 50%, hsl(240, 60%, 80%), transparent),
+      radial-gradient(1px 1px at 80% 10%, hsl(260, 70%, 85%), transparent),
+      radial-gradient(2px 2px at 90% 60%, hsl(180, 60%, 85%), transparent),
+      radial-gradient(1px 1px at 33% 80%, hsl(260, 70%, 80%), transparent),
+      radial-gradient(1px 1px at 15% 60%, hsl(180, 60%, 80%), transparent);
+    --gradient-nebula: 
+      radial-gradient(ellipse at 30% 20%, hsl(260, 70%, 15%) 0%, transparent 50%),
+      radial-gradient(ellipse at 70% 80%, hsl(180, 60%, 12%) 0%, transparent 50%),
+      hsl(240, 10%, 4%);
+    --gradient-primary: linear-gradient(135deg, hsl(260, 70%, 60%), hsl(180, 60%, 55%));
+    --gradient-secondary: linear-gradient(135deg, hsl(180, 60%, 55%), hsl(260, 70%, 60%));
+
+    /* Subtle glass effects */
+    --glass-bg: hsl(240, 8%, 8%) / 0.3;
+    --glass-border: hsl(240, 8%, 18%) / 0.3;
+    --glass-shadow: 0 8px 32px 0 hsl(240, 10%, 0%) / 0.4;
+    --glass-blur: blur(16px);
+
+    /* Enhanced shadows with subtle glow */
+    --shadow-subtle: 0 8px 24px 0 hsl(240, 10%, 0%) / 0.5, 
+                     0 0 20px hsl(260, 70%, 60%) / 0.1,
+                     inset 0 1px 0 0 hsl(240, 8%, 22%) / 0.3;
+    --shadow-medium: 0 12px 40px 0 hsl(240, 10%, 0%) / 0.6,
+                     0 0 30px hsl(260, 70%, 60%) / 0.2;
+
+    --radius: 0.75rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    background: var(--gradient-nebula);
+    background-attachment: fixed;
+    background-size: 100% 100%;
+    overflow-x: hidden;
+    position: relative;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: var(--gradient-starfield);
+    background-size: 200% 200%;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.4;
+  }
+
+  body::after {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: var(--gradient-cosmic);
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.1;
+  }
+}
+
+@layer components {
+  /* Cosmic glassmorphism card styles */
+  .glass-card {
+    @apply backdrop-blur-xl bg-card/70 border border-border rounded-xl relative;
+    box-shadow: var(--shadow-subtle);
+    background: linear-gradient(135deg, hsl(240, 8%, 15%) / 0.8, hsl(240, 8%, 10%) / 0.6);
+  }
+
+  .glass-card-hover {
+    @apply glass-card transition-all duration-500 hover:bg-card/80 hover:border-primary/50;
+    transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .glass-card-hover:hover {
+    transform: translateY(-4px) scale(1.01);
+    box-shadow: var(--shadow-medium);
+    background: linear-gradient(135deg, hsl(260, 70%, 15%) / 0.4, hsl(180, 60%, 15%) / 0.3);
+  }
+
+  /* Premium button styles */
+  .btn-hero {
+    @apply relative px-8 py-4 rounded-xl font-semibold text-foreground overflow-hidden;
+    background: var(--gradient-primary);
+    box-shadow: var(--shadow-subtle);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border: 1px solid hsl(260, 70%, 60%) / 0.3;
+  }
+
+  .btn-hero::before {
+    @apply absolute inset-0 rounded-xl opacity-0 transition-opacity duration-300;
+    content: '';
+    background: var(--gradient-secondary);
+  }
+
+  .btn-hero:hover::before {
+    @apply opacity-100;
+  }
+
+  .btn-hero:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-medium);
+  }
+
+  /* Vibrant gradient text */
+  .gradient-text {
+    background: var(--gradient-primary);
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-size: 200% 200%;
+    animation: gradient-shift 4s ease infinite;
+  }
+
+  /* Skill bars */
+  .skill-bar {
+    @apply relative h-3 rounded-full overflow-hidden;
+    background: hsl(var(--muted));
+    border: 1px solid hsl(240, 8%, 18%) / 0.3;
+  }
+
+  .skill-progress {
+    @apply h-full rounded-full relative overflow-hidden;
+    background: var(--gradient-primary);
+    box-shadow: 0 0 20px hsl(260, 70%, 60%) / 0.5;
+  }
+
+  .skill-progress::after {
+    @apply absolute inset-0;
+    content: '';
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+    animation: shimmer 2s infinite;
+  }
+
+  /* Floating animation */
+  .floating {
+    animation: floating 6s ease-in-out infinite;
+  }
+
+  .floating-delayed {
+    animation: floating 6s ease-in-out infinite;
+    animation-delay: -3s;
+  }
+}
+
+@layer utilities {
+  .text-shadow-glow {
+    text-shadow: 0 0 20px hsl(260, 70%, 70%) / 0.6;
+  }
+}
+
+/* Keyframe animations */
+@keyframes gradient-shift {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes floating {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-20px);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: var(--shadow-subtle);
+  }
+  50% {
+    box-shadow: var(--shadow-medium);
+  }
+}
