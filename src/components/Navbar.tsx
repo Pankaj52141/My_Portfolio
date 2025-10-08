@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu, X, Download, Home, User, Briefcase, Code, Mail } from 'lucide-react';
+import { Menu, X, Download, Home, User, Briefcase, Code, Mail, Beaker } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface NavbarProps {
@@ -20,7 +20,7 @@ const Navbar = ({ onNavigate }: NavbarProps) => {
   { id: 'projects', label: 'Projects', icon: Briefcase },
   { id: 'skills', label: 'Skills', icon: Code },
   { id: 'contact', label: 'Contact', icon: Mail },
-  { id: 'redlab', label: 'Dark Lab', icon: Mail },
+  { id: 'redlab', label: 'Dark Lab', icon: Beaker },
   ];
 
   useEffect(() => {
