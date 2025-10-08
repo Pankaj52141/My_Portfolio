@@ -105,6 +105,12 @@ const ContactSection = () => {
       const data = await res.json();
       if (data.success) {
         setIsVerified(true);
+        // Only set darklab_verified if the verified email matches the .env allowed email
+        if (formData.email === import.meta.env.VITE_ALLOWED_EMAIL) {
+          localStorage.setItem('darklab_verified', 'true');
+        } else {
+          localStorage.removeItem('darklab_verified');
+        }
         toast({ title: 'OTP verified!', description: 'You can now send your message.' });
       } else {
         toast({ title: 'Invalid OTP', description: data.error || 'Try again.', variant: 'destructive' });
@@ -139,10 +145,11 @@ const ContactSection = () => {
         description: "Thank you for your message. I'll get back to you soon.",
         duration: 5000,
       });
-      setFormData({ name: '', email: '', message: '' });
-      setOtp('');
-      setOtpSent(false);
-      setIsVerified(false);
+  setFormData({ name: '', email: '', message: '' });
+  setOtp('');
+  setOtpSent(false);
+  setIsVerified(false);
+  localStorage.removeItem('darklab_verified');
     } catch (error) {
       console.error('Error sending message:', error);
       toast({
