@@ -20,7 +20,7 @@ const Navbar = ({ onNavigate }: NavbarProps) => {
   { id: 'projects', label: 'Projects', icon: Briefcase },
   { id: 'skills', label: 'Skills', icon: Code },
   { id: 'contact', label: 'Contact', icon: Mail },
-  { id: 'redlab', label: 'Dark Lab', icon: Beaker },
+  { id: 'darklab', label: 'Dark Lab', icon: Beaker },
   ];
 
   useEffect(() => {
@@ -34,8 +34,8 @@ const Navbar = ({ onNavigate }: NavbarProps) => {
 
   const handleNavClick = (sectionId: string) => {
     setActiveSection(sectionId);
-    if (sectionId === 'redlab') {
-      navigate('/redlab');
+    if (sectionId === 'darklab') {
+      navigate('/darklab');
       setIsOpen(false);
     } else {
       onNavigate(sectionId);

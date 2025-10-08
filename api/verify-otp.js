@@ -12,9 +12,11 @@ export default async function handler(req, res) {
   }
 
   const { email, otp } = req.body;
+  const allowedEmail = process.env.ALLOWED_EMAIL;
   if (!email || !otp) {
     return res.status(400).json({ error: 'Email and OTP are required' });
   }
+  // Allow verification for any email, but only .env email will get Dark Lab access on frontend
 
   const hashedOtp = crypto.createHash('sha256').update(otp).digest('hex');
 

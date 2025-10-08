@@ -49,13 +49,13 @@ export default async function handler(req, res) {
   }
 
   const { email } = req.body;
-
-  // ...existing code...
+  const allowedEmail = process.env.ALLOWED_EMAIL;
 
   const emailRegex = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
   if (!email || !emailRegex.test(email)) {
     return res.status(400).json({ error: 'Valid email required' });
   }
+  // Allow OTP for any email (for message sending), but only .env email will get Dark Lab access after verification
 
   // Rate limit check: prevent resending within 60 seconds
   let recentOtp = [];

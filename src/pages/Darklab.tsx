@@ -1,4 +1,4 @@
-const RedLab = () => {
+const DarkLab = () => {
 	return (
 		<div className="min-h-screen flex flex-col items-center justify-center bg-background text-foreground">
 			<h1 className="text-5xl font-bold gradient-text mb-6">Dark Lab</h1>
@@ -7,4 +7,4 @@ const RedLab = () => {
 	);
 };
 
-export default RedLab;
+export default DarkLab;
