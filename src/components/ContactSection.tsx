@@ -105,13 +105,21 @@ const ContactSection = () => {
       const data = await res.json();
       if (data.success) {
         setIsVerified(true);
-        // Only set darklab_verified if the verified email matches the .env allowed email
-        if (formData.email === import.meta.env.VITE_ALLOWED_EMAIL) {
+        
+        // Check if this email has Dark Lab access from backend response
+        if (data.darkLabAccess) {
           localStorage.setItem('darklab_verified', 'true');
+          toast({ 
+            title: 'OTP verified!', 
+            description: 'You now have access to Dark Lab and can send messages.' 
+          });
         } else {
           localStorage.removeItem('darklab_verified');
+          toast({ 
+            title: 'OTP verified!', 
+            description: 'You can now send your message.' 
+          });
         }
-        toast({ title: 'OTP verified!', description: 'You can now send your message.' });
       } else {
         toast({ title: 'Invalid OTP', description: data.error || 'Try again.', variant: 'destructive' });
       }

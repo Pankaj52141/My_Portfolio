@@ -7,6 +7,14 @@ const supabase = createClient(
 );
 
 export default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', 'https://portfolio-phi-one-gvcdo0amiz.vercel.app');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
@@ -40,5 +48,12 @@ export default async function handler(req, res) {
 
   await supabase.from('otps').delete().eq('id', record.id);
 
-  res.json({ success: true, message: 'OTP verified' });
+  // Check if this email is allowed for Dark Lab access
+  const isDarkLabAllowed = email === allowedEmail;
+
+  res.json({ 
+    success: true, 
+    message: 'OTP verified',
+    darkLabAccess: isDarkLabAllowed
+  });
 }
