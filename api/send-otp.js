@@ -57,6 +57,28 @@ export default async function handler(req, res) {
   }
   // Allow OTP for any email (for message sending), but only .env email will get Dark Lab access after verification
 
+  // Daily rate limit check: maximum 10 OTPs per email per day
+  let dailyOtpCount = 0;
+  try {
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { data, error } = await supabase
+      .from('otps')
+      .select('id')
+      .eq('email', email)
+      .gte('created_at', yesterday);
+    
+    if (error) throw error;
+    dailyOtpCount = data ? data.length : 0;
+  } catch (fetchError) {
+    return res.status(500).json({ error: 'Server error. Please try again later.' });
+  }
+
+  if (dailyOtpCount >= 10) {
+    return res.status(429).json({ 
+      error: 'Daily OTP limit exceeded. You can only request 10 OTPs per day. Please try again tomorrow.' 
+    });
+  }
+
   // Rate limit check: prevent resending within 60 seconds
   let recentOtp = [];
   try {
@@ -94,7 +116,11 @@ export default async function handler(req, res) {
 
   try {
     await sendOtpEmail(email, otp);
-    res.json({ success: true, message: 'OTP sent. Please check your inbox and spam folder.' });
+    const remainingAttempts = 10 - (dailyOtpCount + 1);
+    res.json({ 
+      success: true, 
+      message: `OTP sent. Please check your inbox and spam folder. You have ${remainingAttempts} OTP requests remaining today.` 
+    });
   } catch (err) {
     res.status(500).json({ error: 'Failed to send OTP email. Please check your email address and try again.' });
   }

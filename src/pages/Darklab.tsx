@@ -1,13 +1,23 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Play, Pause, RotateCcw, Zap, Eye, Waves, Sparkles, Heart, Star, Flower2, Palette, Camera, Music, Skull, Ghost, Flame } from "lucide-react";
+import { Play, Pause, RotateCcw, Zap, Eye, Waves, Sparkles, Heart, Star, Flower2, Palette, Camera, Music, Skull, Ghost, Flame, Menu, X } from "lucide-react";
 
 const DarkLab = () => {
   const [activeEffect, setActiveEffect] = useState("aesthetic");
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>();
   const [isPlaying, setIsPlaying] = useState(true);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  const handleEffectSelect = (effectId: string) => {
+    setActiveEffect(effectId);
+    setIsMenuOpen(false);
+  };
+
+  const getCurrentEffect = () => {
+    return effects.find(effect => effect.id === activeEffect);
+  };
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -25,7 +35,12 @@ const DarkLab = () => {
       if (!isPlaying) return;
       
       time += 0.01;
-      ctx.fillStyle = "rgba(10, 10, 15, 0.1)";
+      
+      // Clear canvas completely instead of using fade overlay
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Set a solid background
+      ctx.fillStyle = "rgba(5, 5, 10, 1)";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       const centerX = canvas.width / 2;
@@ -644,53 +659,92 @@ const DarkLab = () => {
       {/* Background Canvas */}
       <canvas
         ref={canvasRef}
-        className="absolute inset-0 w-full h-full"
+        className="absolute inset-0 w-full h-full z-0"
         style={{ background: "radial-gradient(circle, #0a0a0f 0%, #000000 100%)" }}
       />
 
       {/* Control Panel */}
-      <div className="absolute top-6 left-6 z-10">
-        <Card className="glass-card p-6 backdrop-blur-xl bg-black/30 border border-white/10">
-          <h1 className="text-2xl font-bold gradient-text mb-4 text-center">
-            🌀 DARK LAB 🌀
-          </h1>
-          
-          <div className="space-y-3 mb-4">
-            {effects.map((effect) => {
-              const Icon = effect.icon;
-              return (
-                <Button
-                  key={effect.id}
-                  onClick={() => setActiveEffect(effect.id)}
-                  variant={activeEffect === effect.id ? "default" : "outline"}
-                  className={`w-full justify-start gap-2 ${
-                    activeEffect === effect.id 
-                      ? "btn-hero" 
-                      : "glass-card-hover border-primary/30"
-                  }`}
-                >
-                  <Icon className="w-4 h-4" />
-                  {effect.name}
-                </Button>
-              );
-            })}
-          </div>
-
-          <div className="flex gap-2">
+      <div className="absolute top-6 left-6 z-50">
+        {!isMenuOpen ? (
+          // Collapsed Menu Button
+          <div className="flex flex-col gap-3">
+            <Button
+              onClick={() => setIsMenuOpen(true)}
+              className="btn-hero p-4 flex items-center gap-3 min-w-48"
+            >
+              <Menu className="w-5 h-5" />
+              <div className="flex items-center gap-2">
+                {(() => {
+                  const currentEffect = getCurrentEffect();
+                  const Icon = currentEffect?.icon;
+                  return Icon ? <Icon className="w-4 h-4" /> : null;
+                })()}
+                <span>{getCurrentEffect()?.name}</span>
+              </div>
+            </Button>
+            
             <Button
               onClick={() => setIsPlaying(!isPlaying)}
-              className="btn-hero flex-1"
+              className="btn-hero p-3 flex items-center gap-2"
             >
-              {isPlaying ? <Pause className="w-4 h-4 mr-2" /> : <Play className="w-4 h-4 mr-2" />}
+              {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
               {isPlaying ? "Pause" : "Play"}
             </Button>
           </div>
-        </Card>
+        ) : (
+          // Expanded Menu
+          <Card className="glass-card p-6 backdrop-blur-xl bg-black/90 border border-white/30 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h1 className="text-xl font-bold gradient-text">
+                🌀 DARK LAB 🌀
+              </h1>
+              <Button
+                onClick={() => setIsMenuOpen(false)}
+                variant="ghost"
+                size="sm"
+                className="text-white/70 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            
+            <div className="space-y-2 mb-4 max-h-80 overflow-y-auto">
+              {effects.map((effect) => {
+                const Icon = effect.icon;
+                return (
+                  <Button
+                    key={effect.id}
+                    onClick={() => handleEffectSelect(effect.id)}
+                    variant={activeEffect === effect.id ? "default" : "outline"}
+                    className={`w-full justify-start gap-2 text-sm ${
+                      activeEffect === effect.id 
+                        ? "btn-hero" 
+                        : "glass-card-hover border-primary/30 bg-black/60 hover:bg-black/80"
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" />
+                    {effect.name}
+                  </Button>
+                );
+              })}
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                onClick={() => setIsPlaying(!isPlaying)}
+                className="btn-hero flex-1"
+              >
+                {isPlaying ? <Pause className="w-4 h-4 mr-2" /> : <Play className="w-4 h-4 mr-2" />}
+                {isPlaying ? "Pause" : "Play"}
+              </Button>
+            </div>
+          </Card>
+        )}
       </div>
 
       {/* Info Panel */}
-      <div className="absolute bottom-6 right-6 z-10">
-        <Card className="glass-card p-4 backdrop-blur-xl bg-black/30 border border-white/10 max-w-xs">
+      <div className="absolute bottom-6 right-6 z-50">
+        <Card className="glass-card p-4 backdrop-blur-xl bg-black/80 border border-white/20 max-w-xs shadow-2xl">
           <h3 className="text-lg font-semibold text-primary mb-2">⚠️ WARNING ⚠️</h3>
           <p className="text-sm text-white/80">
             These effects may cause dizziness or discomfort. 
@@ -700,10 +754,10 @@ const DarkLab = () => {
       </div>
 
       {/* Floating Elements */}
-      <div className="absolute top-20 right-20 text-primary/40 floating">
+      <div className="absolute top-20 right-20 text-primary/40 floating z-40">
         <Eye className="w-8 h-8" />
       </div>
-      <div className="absolute bottom-20 left-20 text-secondary/40 floating-delayed">
+      <div className="absolute bottom-20 left-20 text-secondary/40 floating-delayed z-40">
         <Sparkles className="w-10 h-10" />
       </div>
 
