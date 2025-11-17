@@ -46,116 +46,136 @@ const HeroSection = ({ onScrollToProjects }: HeroSectionProps) => {
       </div>
 
       {/* Main content */}
-      <div className="relative z-10 text-center px-4 max-w-4xl mx-auto">
-        {/* Profile Image */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.8, y: 30 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          transition={{ duration: 0.8, ease: "easeOut" }}
-          className="mb-8 relative z-20"
-        >
-          <div className="w-36 h-36 md:w-48 md:h-48 mx-auto relative group">
-            {/* Enhanced glow ring */}
-            <div className="absolute inset-0 rounded-full bg-gradient-primary opacity-60 blur-xl scale-110 group-hover:scale-125 transition-transform duration-500"></div>
-            
-            {/* Sharp border ring */}
-            <div className="absolute inset-0 rounded-full border-4 border-primary/60 group-hover:border-primary/80 transition-colors duration-300"></div>
-            
-            {/* Image container with enhanced visibility */}
-            <motion.div 
-              className="relative w-full h-full rounded-full overflow-hidden"
-              whileHover={{ scale: 1.08, rotateY: 10 }}
-              transition={{ duration: 0.4, ease: "easeOut" }}
-              style={{ transformStyle: "preserve-3d" }}
-            >
-              <img 
-                src="/pankaj.png"
-                alt="Pankaj Jaiswal - Full Stack Developer"
-                className="w-full h-full object-cover brightness-110 contrast-110 saturate-110"
-              />
-              
-              {/* Subtle overlay for depth */}
-              <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-primary/10 mix-blend-overlay"></div>
-            </motion.div>
-            
-            {/* Floating particles effect */}
-            <motion.div 
-              className="absolute -inset-4 pointer-events-none"
-              animate={{
-                rotate: [0, 360],
-              }}
-              transition={{
-                duration: 20,
-                repeat: Infinity,
-                ease: "linear"
-              }}
-            >
-              <div className="absolute top-0 left-1/2 w-2 h-2 bg-primary/40 rounded-full transform -translate-x-1/2"></div>
-              <div className="absolute bottom-0 right-1/4 w-1.5 h-1.5 bg-secondary/40 rounded-full"></div>
-              <div className="absolute left-0 top-1/3 w-1 h-1 bg-accent/40 rounded-full"></div>
-            </motion.div>
-          </div>
-        </motion.div>
-        <motion.div
-          initial={{ opacity: 0, y: 50 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, ease: "easeOut" }}
-          className="mb-6"
-        >
+      <div className="relative z-10 px-4 max-w-7xl mx-auto w-full">
+        <div className="flex flex-col lg:flex-row items-center justify-between gap-12 lg:gap-16">
+          
+          {/* Left Side - Profile Image */}
           <motion.div
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass-card mb-6"
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.6, delay: 0.2 }}
+            initial={{ opacity: 0, x: -50 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.8, ease: "easeOut" }}
+            className="flex-shrink-0"
           >
-            <Sparkles className="w-4 h-4 text-primary-glow" />
-            <span className="text-sm font-medium">Available for new opportunities</span>
+            <div className="w-72 h-72 md:w-96 md:h-96 lg:w-[28rem] lg:h-[28rem] relative group">
+              {/* Enhanced glow ring */}
+              <div className="absolute inset-0 rounded-full bg-gradient-primary opacity-60 blur-2xl scale-110 group-hover:scale-125 transition-transform duration-500"></div>
+              
+              {/* Sharp border ring */}
+              <div className="absolute inset-0 rounded-full border-4 border-primary/60 group-hover:border-primary/80 transition-colors duration-300"></div>
+              
+              {/* Image container with enhanced visibility */}
+              <motion.div 
+                className="relative w-full h-full rounded-full overflow-hidden"
+                whileHover={{ scale: 1.05, rotateY: 5 }}
+                transition={{ duration: 0.4, ease: "easeOut" }}
+                style={{ transformStyle: "preserve-3d" }}
+              >
+                <img 
+                  src="/yomann.jpg"
+                  alt="Pankaj Jaiswal - Full Stack Developer"
+                  className="w-full h-full object-cover brightness-105 contrast-105 saturate-105"
+                />
+                
+                {/* Enhanced depth overlay with gradient */}
+                <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-secondary/10 mix-blend-overlay"></div>
+                
+                {/* Subtle inner shadow for depth */}
+                <div className="absolute inset-0 shadow-[inset_0_0_60px_rgba(0,0,0,0.3)] rounded-full"></div>
+              </motion.div>
+              
+              {/* Floating particles effect */}
+              <motion.div 
+                className="absolute -inset-4 pointer-events-none"
+                animate={{
+                  rotate: [0, 360],
+                }}
+                transition={{
+                  duration: 20,
+                  repeat: Infinity,
+                  ease: "linear"
+                }}
+              >
+                <div className="absolute top-0 left-1/2 w-3 h-3 bg-primary/40 rounded-full transform -translate-x-1/2"></div>
+                <div className="absolute bottom-0 right-1/4 w-2 h-2 bg-secondary/40 rounded-full"></div>
+                <div className="absolute left-0 top-1/3 w-2 h-2 bg-accent/40 rounded-full"></div>
+              </motion.div>
+            </div>
           </motion.div>
-          
-          <h1 className="text-6xl md:text-8xl font-bold mb-4 leading-tight">
-            <span className="gradient-text">Pankaj</span>
-            <br />
-            <span className="text-foreground">Jaiswal</span>
-          </h1>
-        </motion.div>
 
-        <motion.p
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.4 }}
-          className="text-xl md:text-2xl text-muted-foreground mb-8 max-w-2xl mx-auto leading-relaxed"
-        >
-          Crafting Modern Interfaces & Intelligent Apps
-          <br />
-          <span className="text-primary-glow">Full Stack Developer</span> • <span className="text-secondary-glow">AI/ML Enthusiast</span>
-        </motion.p>
+          {/* Right Side - Text Content */}
+          <motion.div
+            initial={{ opacity: 0, x: 50 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }}
+            className="flex-1 text-left lg:text-left"
+          >
+            <motion.div
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass-card mb-6"
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.6, delay: 0.4 }}
+            >
+              <Sparkles className="w-4 h-4 text-primary-glow" />
+              <span className="text-sm font-medium">Available for new opportunities</span>
+            </motion.div>
+            
+            <motion.h1 
+              className="text-5xl md:text-7xl lg:text-8xl font-bold mb-6 leading-tight"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.5 }}
+            >
+              <span className="gradient-text">Pankaj</span>
+              <br />
+              <span className="text-foreground">Jaiswal</span>
+            </motion.h1>
 
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.6 }}
-          className="flex flex-col sm:flex-row gap-4 justify-center items-center"
-        >
-          <button
-            onClick={onScrollToProjects}
-            className="btn-hero relative z-10 group"
-          >
-            <span className="relative z-10 flex items-center gap-2">
-              Explore Projects
-              <ChevronDown className="w-4 h-4 group-hover:translate-y-1 transition-transform" />
-            </span>
-          </button>
-          
-          <motion.a
-            href="/Pankaj_Jaiswal_Resume.pdf"
-            download="Pankaj_Jaiswal_Resume.pdf"
-            className="glass-card-hover px-8 py-4 rounded-xl font-semibold text-foreground inline-block"
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            Download Resume
-          </motion.a>
-        </motion.div>
+            <motion.p
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.6 }}
+              className="text-xl md:text-2xl lg:text-3xl text-muted-foreground mb-4 leading-relaxed"
+            >
+              Crafting Modern Interfaces & Intelligent Apps
+            </motion.p>
+            
+            <motion.p
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.7 }}
+              className="text-lg md:text-xl mb-8"
+            >
+              <span className="text-primary-glow font-semibold">Full Stack Developer</span> • <span className="text-secondary-glow font-semibold">AI/ML Enthusiast</span>
+            </motion.p>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.8 }}
+              className="flex flex-col sm:flex-row gap-4"
+            >
+              <button
+                onClick={onScrollToProjects}
+                className="btn-hero relative z-10 group"
+              >
+                <span className="relative z-10 flex items-center gap-2">
+                  Explore Projects
+                  <ChevronDown className="w-4 h-4 group-hover:translate-y-1 transition-transform" />
+                </span>
+              </button>
+              
+              <motion.a
+                href="/Pankaj_Jaiswal_Resume.pdf"
+                download="Pankaj_Jaiswal_Resume.pdf"
+                className="glass-card-hover px-8 py-4 rounded-xl font-semibold text-foreground inline-block text-center"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                Download Resume
+              </motion.a>
+            </motion.div>
+          </motion.div>
+        </div>
 
         {/* Scroll indicator */}
         <motion.div
