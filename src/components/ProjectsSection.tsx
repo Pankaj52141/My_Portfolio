@@ -40,7 +40,7 @@ const projects = [
       "Web app for generating invoices with PDF/Excel export and SQLite database.",
     image: invoiceGeneratorImg,
     tech: ["React", "SQLite", "PDF Export", "Excel", "Node.js"],
-    liveUrl: "https://billmate1.vercel.app/",
+    liveUrl: "https://billmate-ochre.vercel.app/",
     githubUrl: "https://github.com/Pankaj52141/billmate",
   },
 ];
