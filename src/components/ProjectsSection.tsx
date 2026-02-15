@@ -6,6 +6,7 @@ import aiEcommerceImg from "@/assets/ai-ecommerce.jpg";
 import energyDashboardImg from "@/assets/energy-dashboard.jpg";
 import aiChatbotImg from "@/assets/ai-chatbot.jpg";
 import invoiceGeneratorImg from "@/assets/invoice-generator.jpg";
+import rideshareImg from "@/assets/rideshare.png";
 
 const projects = [
   {
@@ -42,6 +43,15 @@ const projects = [
     tech: ["React", "SQLite", "PDF Export", "Excel", "Node.js"],
     liveUrl: "https://billmate1.vercel.app/",
     githubUrl: "https://github.com/Pankaj52141/billmate",
+  },
+  {
+    title: "RideShare",
+    description:
+      "Ride-sharing platform with fare splitting, voice-command booking for PWD/blind users, real-time tracking,payments.",
+    image: rideshareImg,
+    tech: ["React", "TypeScript", "Stripe", "Voice API", "Accessibility"],
+    liveUrl: "https://fj-fe-r2-pankaj-jaiswal-nit-delhi.vercel.app/",
+    githubUrl: "https://github.com/Pankaj52141/RideShare",
   },
 ];
 
