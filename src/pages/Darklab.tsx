@@ -1,772 +1,1088 @@
-import { useState, useEffect, useRef } from "react";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Play, Pause, RotateCcw, Zap, Eye, Waves, Sparkles, Heart, Star, Flower2, Palette, Camera, Music, Skull, Ghost, Flame, Menu, X } from "lucide-react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { motion, AnimatePresence } from "framer-motion";
+import { format } from "date-fns";
+import {
+  Search, Plus, X, Upload, TrendingUp, TrendingDown,
+  Lock, ChevronLeft, ChevronRight, Trash2, BarChart3,
+  Target, Calendar, ImageIcon, Loader2, Eye, ArrowLeft,
+  LogIn, LogOut, Mail,
+} from "lucide-react";
 
+/* ───────────────── types ───────────────── */
+interface TradeEntry {
+  id: string;
+  trade_date: string;
+  screenshot_url: string;
+  pnl_amount: number;
+  instrument: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+const ITEMS_PER_PAGE = 12;
+
+/* ────────────── helpers ────────────── */
+const formatPnl = (amount: number) => {
+  const abs = Math.abs(amount).toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  return amount >= 0 ? `+₹${abs}` : `-₹${abs}`;
+};
+
+/* ══════════════════ COMPONENT ══════════════════ */
 const DarkLab = () => {
-  const [activeEffect, setActiveEffect] = useState("aesthetic");
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const animationRef = useRef<number>();
-  const [isPlaying, setIsPlaying] = useState(true);
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  /* ── state ── */
+  const [entries, setEntries] = useState<TradeEntry[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
-  const handleEffectSelect = (effectId: string) => {
-    setActiveEffect(effectId);
-    setIsMenuOpen(false);
+  // upload form
+  const [formDate, setFormDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [formPnl, setFormPnl] = useState("");
+  const [formInstrument, setFormInstrument] = useState("OPTIONS");
+  const [formNotes, setFormNotes] = useState("");
+  const [formFile, setFormFile] = useState<File | null>(null);
+  const [formPreview, setFormPreview] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // auth state
+  const [isOwner, setIsOwner] = useState(false);
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authEmail, setAuthEmail] = useState("");
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpValue, setOtpValue] = useState("");
+  const [otpMessage, setOtpMessage] = useState("");
+
+  const apiBaseUrl = import.meta.env.VITE_API_URL || "";
+
+  /* ── auth: check persisted owner session ── */
+  useEffect(() => {
+    const ownerVerified = localStorage.getItem("darklab_owner_verified") === "true";
+    setIsOwner(ownerVerified);
+  }, []);
+
+  const handleSendOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!authEmail) return;
+    setAuthLoading(true);
+    setOtpMessage("");
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/send-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: authEmail }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to send OTP");
+      setOtpSent(true);
+      setOtpMessage(data.message || "OTP sent! Check your email.");
+    } catch (err: any) {
+      setOtpMessage(err.message || "Failed to send OTP");
+    } finally {
+      setAuthLoading(false);
+    }
   };
 
-  const getCurrentEffect = () => {
-    return effects.find(effect => effect.id === activeEffect);
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!otpValue) return;
+    setAuthLoading(true);
+    setOtpMessage("");
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/verify-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: authEmail, otp: otpValue }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Invalid OTP");
+      if (data.darkLabAccess) {
+        localStorage.setItem("darklab_owner_verified", "true");
+        setIsOwner(true);
+        setShowAuthModal(false);
+        resetAuthForm();
+      } else {
+        setOtpMessage("Access denied. Only the owner can manage trades.");
+      }
+    } catch (err: any) {
+      setOtpMessage(err.message || "Verification failed");
+    } finally {
+      setAuthLoading(false);
+    }
   };
+
+  const handleSignOut = () => {
+    localStorage.removeItem("darklab_owner_verified");
+    setIsOwner(false);
+  };
+
+  const resetAuthForm = () => {
+    setAuthEmail("");
+    setOtpValue("");
+    setOtpSent(false);
+    setOtpMessage("");
+  };
+
+  /* ── fetch ── */
+  useEffect(() => {
+    fetchEntries();
+  }, []);
+
+  const fetchEntries = async () => {
+    try {
+      setIsLoading(true);
+      const { data, error } = await (supabase as any)
+        .from("trading_journal")
+        .select("*")
+        .order("trade_date", { ascending: false });
+      if (error) throw error;
+      setEntries((data as TradeEntry[]) || []);
+    } catch (err) {
+      console.error("Error fetching trades:", err);
+      setEntries([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /* ── filter + paginate ── */
+  const filteredEntries = useMemo(() => {
+    if (!searchQuery.trim()) return entries;
+    const q = searchQuery.toLowerCase();
+    return entries.filter((entry) => {
+      const date = new Date(entry.trade_date + "T00:00:00");
+      const monthName = format(date, "MMMM").toLowerCase();
+      const dayName = format(date, "EEEE").toLowerCase();
+      const dateStr = format(date, "MMM dd, yyyy").toLowerCase();
+      const pnlStr = entry.pnl_amount.toString();
+      return (
+        monthName.includes(q) ||
+        dayName.includes(q) ||
+        dateStr.includes(q) ||
+        pnlStr.includes(q) ||
+        entry.instrument?.toLowerCase().includes(q) ||
+        entry.notes?.toLowerCase().includes(q)
+      );
+    });
+  }, [searchQuery, entries]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredEntries.length / ITEMS_PER_PAGE));
+  const paginatedEntries = filteredEntries.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE,
+  );
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    setCurrentPage(1);
+  }, [searchQuery]);
 
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+  /* ── stats ── */
+  const stats = useMemo(() => {
+    const total = entries.length;
+    const totalPnl = entries.reduce((s, e) => s + Number(e.pnl_amount), 0);
+    const wins = entries.filter((e) => Number(e.pnl_amount) > 0).length;
+    const losses = entries.filter((e) => Number(e.pnl_amount) < 0).length;
+    const winRate = total > 0 ? (wins / total) * 100 : 0;
+    const bestDay = entries.length > 0 ? Math.max(...entries.map((e) => Number(e.pnl_amount))) : 0;
+    const worstDay = entries.length > 0 ? Math.min(...entries.map((e) => Number(e.pnl_amount))) : 0;
+    return { total, totalPnl, wins, losses, winRate, bestDay, worstDay };
+  }, [entries]);
 
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-
-    let time = 0;
-
-    const animate = () => {
-      if (!isPlaying) return;
-      
-      time += 0.01;
-      
-      // Clear canvas completely instead of using fade overlay
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      
-      // Set a solid background
-      ctx.fillStyle = "rgba(5, 5, 10, 1)";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      const centerX = canvas.width / 2;
-      const centerY = canvas.height / 2;
-
-      if (activeEffect === "spiral") {
-        drawHypnoticSpiral(ctx, centerX, centerY, time);
-      } else if (activeEffect === "waves") {
-        drawPsychedelicWaves(ctx, centerX, centerY, time);
-      } else if (activeEffect === "particles") {
-        drawParticleField(ctx, centerX, centerY, time);
-      } else if (activeEffect === "tunnel") {
-        drawTunnel(ctx, centerX, centerY, time);
-      } else if (activeEffect === "kaleidoscope") {
-        drawKaleidoscope(ctx, centerX, centerY, time);
-      } else if (activeEffect === "hearts") {
-        drawFloatingHearts(ctx, centerX, centerY, time);
-      } else if (activeEffect === "aurora") {
-        drawAurora(ctx, centerX, centerY, time);
-      } else if (activeEffect === "flowers") {
-        drawFloralPattern(ctx, centerX, centerY, time);
-      } else if (activeEffect === "aesthetic") {
-        drawAestheticVibes(ctx, centerX, centerY, time);
-      } else if (activeEffect === "neon") {
-        drawNeonCity(ctx, centerX, centerY, time);
-      } else if (activeEffect === "dreamy") {
-        drawDreamyGradients(ctx, centerX, centerY, time);
-      } else if (activeEffect === "horror") {
-        drawHorrorScene(ctx, centerX, centerY, time);
-      } else if (activeEffect === "blood") {
-        drawBloodMoon(ctx, centerX, centerY, time);
-      } else if (activeEffect === "shadow") {
-        drawShadowRealm(ctx, centerX, centerY, time);
-      }
-
-      animationRef.current = requestAnimationFrame(animate);
-    };
-
-    animate();
-
-    return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-    };
-  }, [activeEffect, isPlaying]);
-
-  const drawHypnoticSpiral = (ctx: CanvasRenderingContext2D, centerX: number, centerY: number, time: number) => {
-    for (let i = 0; i < 200; i++) {
-      const angle = i * 0.1 + time * 3;
-      const radius = i * 2;
-      const x = centerX + Math.cos(angle) * radius;
-      const y = centerY + Math.sin(angle) * radius;
-      
-      const hue = (i * 2 + time * 100) % 360;
-      ctx.fillStyle = `hsl(${hue}, 70%, 60%)`;
-      ctx.beginPath();
-      ctx.arc(x, y, 3, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  };
-
-  const drawPsychedelicWaves = (ctx: CanvasRenderingContext2D, centerX: number, centerY: number, time: number) => {
-    for (let x = 0; x < ctx.canvas.width; x += 5) {
-      for (let y = 0; y < ctx.canvas.height; y += 5) {
-        const distance = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2);
-        const wave = Math.sin(distance * 0.01 + time * 5) * 127 + 128;
-        const hue = (wave + time * 50) % 360;
-        
-        ctx.fillStyle = `hsl(${hue}, 80%, 50%)`;
-        ctx.fillRect(x, y, 4, 4);
-      }
-    }
-  };
-
-  const drawParticleField = (ctx: CanvasRenderingContext2D, centerX: number, centerY: number, time: number) => {
-    for (let i = 0; i < 100; i++) {
-      const angle = i * 0.1 + time;
-      const radius = 100 + Math.sin(time + i * 0.1) * 200;
-      const x = centerX + Math.cos(angle) * radius;
-      const y = centerY + Math.sin(angle) * radius;
-      
-      const size = Math.sin(time + i * 0.1) * 5 + 5;
-      const hue = (i * 10 + time * 100) % 360;
-      
-      ctx.fillStyle = `hsl(${hue}, 100%, 70%)`;
-      ctx.shadowBlur = 20;
-      ctx.shadowColor = `hsl(${hue}, 100%, 70%)`;
-      ctx.beginPath();
-      ctx.arc(x, y, size, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.shadowBlur = 0;
-    }
-  };
-
-  const drawTunnel = (ctx: CanvasRenderingContext2D, centerX: number, centerY: number, time: number) => {
-    for (let i = 0; i < 50; i++) {
-      const radius = i * 20 + (time * 100) % 1000;
-      const hue = (i * 20 + time * 100) % 360;
-      
-      ctx.strokeStyle = `hsl(${hue}, 70%, 60%)`;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-  };
-
-  const drawKaleidoscope = (ctx: CanvasRenderingContext2D, centerX: number, centerY: number, time: number) => {
-    ctx.save();
-    ctx.translate(centerX, centerY);
-    
-    for (let i = 0; i < 8; i++) {
-      ctx.save();
-      ctx.rotate((i * Math.PI) / 4);
-      
-      for (let j = 0; j < 20; j++) {
-        const x = j * 20;
-        const y = Math.sin(time + j * 0.5) * 50;
-        const hue = (j * 20 + time * 100) % 360;
-        
-        ctx.fillStyle = `hsl(${hue}, 80%, 60%)`;
-        ctx.beginPath();
-        ctx.arc(x, y, 5, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.restore();
-    }
-    ctx.restore();
-  };
-
-  const drawFloatingHearts = (ctx: CanvasRenderingContext2D, centerX: number, centerY: number, time: number) => {
-    for (let i = 0; i < 30; i++) {
-      const x = centerX + Math.sin(time + i * 0.5) * (100 + i * 10);
-      const y = centerY + Math.cos(time + i * 0.3) * (80 + i * 8);
-      const size = Math.sin(time + i * 0.2) * 10 + 15;
-      
-      // Heart colors - pinks, reds, purples
-      const colors = ['#ff69b4', '#ff1493', '#dc143c', '#ba55d3', '#ff6347'];
-      const color = colors[i % colors.length];
-      
-      ctx.fillStyle = color;
-      ctx.shadowBlur = 15;
-      ctx.shadowColor = color;
-      
-      // Draw heart shape
-      ctx.save();
-      ctx.translate(x, y);
-      ctx.scale(size / 20, size / 20);
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.bezierCurveTo(-10, -10, -20, -5, -10, 5);
-      ctx.bezierCurveTo(0, 15, 0, 15, 0, 5);
-      ctx.bezierCurveTo(0, 15, 0, 15, 10, 5);
-      ctx.bezierCurveTo(20, -5, 10, -10, 0, 0);
-      ctx.fill();
-      ctx.restore();
-      ctx.shadowBlur = 0;
-    }
-  };
-
-  const drawAurora = (ctx: CanvasRenderingContext2D, centerX: number, centerY: number, time: number) => {
-    // Beautiful aurora borealis effect
-    for (let i = 0; i < 8; i++) {
-      const gradient = ctx.createLinearGradient(0, 0, ctx.canvas.width, ctx.canvas.height);
-      
-      const colors = [
-        ['#00ff87', '#60efff'], // Green to cyan
-        ['#ff0080', '#ff8c00'], // Pink to orange  
-        ['#8a2be2', '#00bfff'], // Purple to blue
-        ['#ff69b4', '#00ff7f'], // Pink to green
-      ];
-      
-      const colorPair = colors[i % colors.length];
-      gradient.addColorStop(0, colorPair[0] + '40');
-      gradient.addColorStop(1, colorPair[1] + '20');
-      
-      ctx.fillStyle = gradient;
-      
-      // Create flowing aurora waves
-      ctx.beginPath();
-      for (let x = 0; x < ctx.canvas.width; x += 5) {
-        const wave1 = Math.sin(x * 0.01 + time + i) * 50;
-        const wave2 = Math.sin(x * 0.005 + time * 0.5 + i) * 100;
-        const y = centerY + wave1 + wave2 + (i - 4) * 40;
-        
-        if (x === 0) {
-          ctx.moveTo(x, y);
-        } else {
-          ctx.lineTo(x, y);
-        }
-      }
-      ctx.lineTo(ctx.canvas.width, ctx.canvas.height);
-      ctx.lineTo(0, ctx.canvas.height);
-      ctx.fill();
-    }
-  };
-
-  const drawFloralPattern = (ctx: CanvasRenderingContext2D, centerX: number, centerY: number, time: number) => {
-    // Beautiful mandala-like floral patterns
-    ctx.save();
-    ctx.translate(centerX, centerY);
-    
-    for (let ring = 0; ring < 6; ring++) {
-      const petals = 8 + ring * 2;
-      const radius = 50 + ring * 30;
-      
-      for (let i = 0; i < petals; i++) {
-        const angle = (i * 2 * Math.PI) / petals + time * 0.5;
-        const x = Math.cos(angle) * radius;
-        const y = Math.sin(angle) * radius;
-        
-        ctx.save();
-        ctx.translate(x, y);
-        ctx.rotate(angle + time);
-        
-        // Flower colors - pastels and vibrant florals
-        const flowerColors = ['#ffb6c1', '#ffd1dc', '#e6e6fa', '#f0e68c', '#98fb98', '#ffa07a'];
-        const color = flowerColors[ring % flowerColors.length];
-        
-        ctx.fillStyle = color;
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = color;
-        
-        // Draw petal
-        ctx.beginPath();
-        ctx.ellipse(0, 0, 8, 20, 0, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Add sparkle effect
-        ctx.fillStyle = '#ffffff80';
-        ctx.beginPath();
-        ctx.arc(0, -10, 2, 0, Math.PI * 2);
-        ctx.fill();
-        
-      }
-    }
-    ctx.restore();
-  };
-
-  const drawAestheticVibes = (ctx: CanvasRenderingContext2D, centerX: number, centerY: number, time: number) => {
-    // Modern aesthetic with trendy color palettes
-    const aestheticColors = [
-      '#ff9a9e', '#fecfef', '#fecfef', // Pink gradient
-      '#a8edea', '#fed6e3', '#d299c2', // Mint to pink
-      '#ffecd2', '#fcb69f', '#ff8a80', // Peach sunset
-      '#667eea', '#764ba2', '#f093fb', // Purple aesthetic
-      '#4facfe', '#00f2fe', '#43e97b', // Ocean vibes
-    ];
-
-    // Create floating aesthetic elements
-    for (let i = 0; i < 50; i++) {
-      const angle = (i * 0.1) + time * 0.5;
-      const radius = 80 + Math.sin(time + i * 0.1) * 150;
-      const x = centerX + Math.cos(angle) * radius;
-      const y = centerY + Math.sin(angle) * radius;
-      
-      // Create gradient circles
-      const gradient = ctx.createRadialGradient(x, y, 0, x, y, 25);
-      const color1 = aestheticColors[i % aestheticColors.length];
-      const color2 = aestheticColors[(i + 1) % aestheticColors.length];
-      
-      gradient.addColorStop(0, color1 + 'AA');
-      gradient.addColorStop(1, color2 + '22');
-      
-      ctx.fillStyle = gradient;
-      ctx.beginPath();
-      ctx.arc(x, y, 20 + Math.sin(time + i) * 5, 0, Math.PI * 2);
-      ctx.fill();
-      
-      // Add sparkle overlay
-      if (i % 3 === 0) {
-        ctx.fillStyle = '#ffffffCC';
-        ctx.beginPath();
-        ctx.arc(x + 5, y - 5, 2, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-  };
-
-  const drawNeonCity = (ctx: CanvasRenderingContext2D, centerX: number, centerY: number, time: number) => {
-    // Cyberpunk neon city aesthetic
-    const neonColors = ['#ff0080', '#00ffff', '#ff3030', '#8a2be2', '#00ff00', '#ffff00'];
-    
-    // Background grid (retro vibe)
-    ctx.strokeStyle = '#ff008040';
-    ctx.lineWidth = 1;
-    for (let i = -10; i < 10; i++) {
-      const x = centerX + i * 40 + Math.sin(time) * 10;
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, ctx.canvas.height);
-      ctx.stroke();
-      
-      const y = centerY + i * 40 + Math.cos(time) * 10;
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(ctx.canvas.width, y);
-      ctx.stroke();
-    }
-    
-    // Neon geometric shapes
-    for (let i = 0; i < 15; i++) {
-      const x = centerX + Math.sin(time + i * 0.5) * 200;
-      const y = centerY + Math.cos(time + i * 0.3) * 150;
-      const size = 30 + Math.sin(time + i) * 20;
-      const color = neonColors[i % neonColors.length];
-      
-      ctx.strokeStyle = color;
-      ctx.shadowBlur = 20;
-      ctx.shadowColor = color;
-      ctx.lineWidth = 3;
-      
-      if (i % 3 === 0) {
-        // Neon triangles
-        ctx.beginPath();
-        ctx.moveTo(x, y - size);
-        ctx.lineTo(x - size, y + size);
-        ctx.lineTo(x + size, y + size);
-        ctx.closePath();
-        ctx.stroke();
-      } else if (i % 3 === 1) {
-        // Neon circles
-        ctx.beginPath();
-        ctx.arc(x, y, size, 0, Math.PI * 2);
-        ctx.stroke();
-      } else {
-        // Neon squares
-        ctx.strokeRect(x - size/2, y - size/2, size, size);
-      }
-      ctx.shadowBlur = 0;
-    }
-  };
-
-  const drawDreamyGradients = (ctx: CanvasRenderingContext2D, centerX: number, centerY: number, time: number) => {
-    // Instagram-worthy dreamy gradient waves
-    const dreamyPalettes = [
-      ['#ff9a9e', '#fecfef', '#fecfef'], // Sunset pink
-      ['#a8edea', '#fed6e3'], // Mint dream
-      ['#d299c2', '#fef9d7'], // Purple morning
-      ['#89f7fe', '#66a6ff'], // Sky dreams
-      ['#fdbb2d', '#22c1c3'], // Golden ocean
-      ['#ee9ca7', '#ffdde1'], // Rose gold
-    ];
-    
-    // Create flowing gradient waves
-    for (let layer = 0; layer < 6; layer++) {
-      const palette = dreamyPalettes[layer % dreamyPalettes.length];
-      const gradient = ctx.createLinearGradient(
-        0, 0, 
-        ctx.canvas.width, ctx.canvas.height
-      );
-      
-      palette.forEach((color, index) => {
-        gradient.addColorStop(index / (palette.length - 1), color + '40');
+  /* ── upload logic ── */
+  const uploadScreenshot = async (file: File): Promise<string> => {
+    try {
+      const fileExt = file.name.split(".").pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
+      const { error: uploadError } = await supabase.storage
+        .from("trading-screenshots")
+        .upload(fileName, file, { contentType: file.type });
+      if (uploadError) throw uploadError;
+      const { data: urlData } = supabase.storage
+        .from("trading-screenshots")
+        .getPublicUrl(fileName);
+      return urlData.publicUrl;
+    } catch {
+      // fallback → base64
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
       });
-      
-      ctx.fillStyle = gradient;
-      
-      // Create organic wave shapes
-      ctx.beginPath();
-      for (let x = 0; x <= ctx.canvas.width; x += 10) {
-        const wave1 = Math.sin(x * 0.005 + time + layer * 0.5) * 100;
-        const wave2 = Math.sin(x * 0.008 + time * 1.2 + layer) * 60;
-        const wave3 = Math.sin(x * 0.003 + time * 0.8 + layer * 1.5) * 40;
-        
-        const y = centerY + wave1 + wave2 + wave3 + (layer - 3) * 50;
-        
-        if (x === 0) {
-          ctx.moveTo(x, y);
-        } else {
-          ctx.lineTo(x, y);
-        }
-      }
-      
-      // Complete the shape
-      ctx.lineTo(ctx.canvas.width, ctx.canvas.height);
-      ctx.lineTo(0, ctx.canvas.height);
-      ctx.closePath();
-      ctx.fill();
-    }
-    
-    // Add floating dreamy particles
-    for (let i = 0; i < 25; i++) {
-      const x = Math.sin(time * 0.5 + i * 0.3) * 300 + centerX;
-      const y = Math.cos(time * 0.3 + i * 0.4) * 200 + centerY;
-      const size = Math.sin(time + i) * 3 + 5;
-      
-      const gradient = ctx.createRadialGradient(x, y, 0, x, y, size * 2);
-      gradient.addColorStop(0, '#ffffff88');
-      gradient.addColorStop(1, '#ffffff00');
-      
-      ctx.beginPath();
-      ctx.arc(x, y, size, 0, Math.PI * 2);
-      ctx.fill();
     }
   };
 
-  const drawHorrorScene = (ctx: CanvasRenderingContext2D, centerX: number, centerY: number, time: number) => {
-    // Creepy horror atmosphere with moving shadows and eyes
-    
-    // Dark, ominous background
-    const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, 400);
-    gradient.addColorStop(0, '#1a0000');
-    gradient.addColorStop(1, '#000000');
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-    
-    // Creepy glowing eyes
-    for (let i = 0; i < 8; i++) {
-      const angle = (i * Math.PI * 2) / 8 + time * 0.5;
-      const radius = 150 + Math.sin(time + i) * 50;
-      const x = centerX + Math.cos(angle) * radius;
-      const y = centerY + Math.sin(angle) * radius;
-      
-      // Eye glow
-      const eyeGradient = ctx.createRadialGradient(x, y, 0, x, y, 20);
-      eyeGradient.addColorStop(0, '#ff0000');
-      eyeGradient.addColorStop(0.5, '#ff4444');
-      eyeGradient.addColorStop(1, 'transparent');
-      
-      ctx.fillStyle = eyeGradient;
-      ctx.beginPath();
-      ctx.arc(x, y, 15, 0, Math.PI * 2);
-      ctx.fill();
-      
-      // Eye pupil
-      ctx.fillStyle = '#000000';
-      ctx.beginPath();
-      ctx.arc(x, y, 5, 0, Math.PI * 2);
-      ctx.fill();
-      
-      // Blinking effect
-      if (Math.sin(time * 3 + i * 2) > 0.8) {
-        ctx.fillStyle = '#220000';
-        ctx.fillRect(x - 10, y - 2, 20, 4);
-      }
-    }
-    
-    // Moving shadows
-    for (let i = 0; i < 15; i++) {
-      const x = Math.sin(time * 0.3 + i * 0.5) * 300 + centerX;
-      const y = Math.cos(time * 0.2 + i * 0.7) * 200 + centerY;
-      
-      const shadowGradient = ctx.createRadialGradient(x, y, 0, x, y, 40);
-      shadowGradient.addColorStop(0, '#000000AA');
-      shadowGradient.addColorStop(1, 'transparent');
-      
-      ctx.fillStyle = shadowGradient;
-      ctx.beginPath();
-      ctx.arc(x, y, 30 + Math.sin(time + i) * 10, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    
-    // Lightning flashes
-    if (Math.random() < 0.02) {
-      ctx.fillStyle = '#ffffff22';
-      ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  const handleUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formFile || !formPnl) return;
+    setIsUploading(true);
+    try {
+      const screenshotUrl = await uploadScreenshot(formFile);
+      const { error } = await (supabase as any).from("trading_journal").insert({
+        trade_date: formDate,
+        screenshot_url: screenshotUrl,
+        pnl_amount: parseFloat(formPnl),
+        instrument: formInstrument || "OPTIONS",
+        notes: formNotes || null,
+      });
+      if (error) throw error;
+      await fetchEntries();
+      resetForm();
+      setIsUploadOpen(false);
+    } catch (err) {
+      console.error("Upload error:", err);
+      alert("Failed to upload trade. Make sure the 'trading_journal' table exists in Supabase.");
+    } finally {
+      setIsUploading(false);
     }
   };
 
-  const drawBloodMoon = (ctx: CanvasRenderingContext2D, centerX: number, centerY: number, time: number) => {
-    // Blood moon with dripping effect
-    
-    // Dark sky gradient
-    const skyGradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.height);
-    skyGradient.addColorStop(0, '#000000');
-    skyGradient.addColorStop(0.3, '#220000');
-    skyGradient.addColorStop(1, '#440000');
-    ctx.fillStyle = skyGradient;
-    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-    
-    // Blood moon
-    const moonGradient = ctx.createRadialGradient(centerX, centerY - 100, 0, centerX, centerY - 100, 80);
-    moonGradient.addColorStop(0, '#ff6666');
-    moonGradient.addColorStop(0.7, '#cc0000');
-    moonGradient.addColorStop(1, '#660000');
-    
-    ctx.fillStyle = moonGradient;
-    ctx.shadowBlur = 50;
-    ctx.shadowColor = '#ff0000';
-    ctx.beginPath();
-    ctx.arc(centerX, centerY - 100, 70, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-    
-    // Blood drips from moon
-    for (let i = 0; i < 8; i++) {
-      const x = centerX + (i - 4) * 15 + Math.sin(time + i) * 5;
-      const dripLength = 50 + Math.sin(time * 2 + i) * 30;
-      
-      const dripGradient = ctx.createLinearGradient(x, centerY - 30, x, centerY - 30 + dripLength);
-      dripGradient.addColorStop(0, '#cc0000');
-      dripGradient.addColorStop(1, '#660000');
-      
-      ctx.fillStyle = dripGradient;
-      ctx.fillRect(x - 2, centerY - 30, 4, dripLength);
-      
-      // Drip drops
-      ctx.fillStyle = '#cc0000';
-      ctx.beginPath();
-      ctx.arc(x, centerY - 30 + dripLength, 3, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    
-    // Floating blood particles
-    for (let i = 0; i < 20; i++) {
-      const x = Math.sin(time * 0.5 + i * 0.3) * 400 + centerX;
-      const y = Math.cos(time * 0.3 + i * 0.4) * 300 + centerY;
-      const size = Math.sin(time + i) * 2 + 3;
-      
-      ctx.fillStyle = '#aa0000';
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = '#ff0000';
-      ctx.beginPath();
-      ctx.arc(x, y, size, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.shadowBlur = 0;
+  const handleDelete = async (id: string) => {
+    try {
+      const { error } = await (supabase as any)
+        .from("trading_journal")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+      setEntries((prev) => prev.filter((e) => e.id !== id));
+      setDeleteConfirm(null);
+    } catch (err) {
+      console.error("Delete error:", err);
     }
   };
 
-  const drawShadowRealm = (ctx: CanvasRenderingContext2D, centerX: number, centerY: number, time: number) => {
-    // Dark realm with ghostly figures and portals
-    
-    // Deep darkness with subtle purple tint
-    const realmGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, 500);
-    realmGradient.addColorStop(0, '#0a0010');
-    realmGradient.addColorStop(1, '#000000');
-    ctx.fillStyle = realmGradient;
-    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-    
-    // Dark portals
-    for (let i = 0; i < 3; i++) {
-      const angle = (i * Math.PI * 2) / 3 + time * 0.2;
-      const x = centerX + Math.cos(angle) * 200;
-      const y = centerY + Math.sin(angle) * 150;
-      
-      // Portal swirl
-      for (let j = 0; j < 15; j++) {
-        const spiralAngle = j * 0.4 + time * 3;
-        const spiralRadius = j * 3;
-        const spiralX = x + Math.cos(spiralAngle) * spiralRadius;
-        const spiralY = y + Math.sin(spiralAngle) * spiralRadius;
-        
-        ctx.fillStyle = `hsl(270, 50%, ${20 + j * 2}%)`;
-        ctx.shadowBlur = 15;
-        ctx.shadowColor = '#6600ff';
-        ctx.beginPath();
-        ctx.arc(spiralX, spiralY, 3, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-      }
-    }
-    
-    // Ghostly figures
-    for (let i = 0; i < 6; i++) {
-      const x = Math.sin(time * 0.2 + i * 1.2) * 250 + centerX;
-      const y = Math.cos(time * 0.15 + i * 0.8) * 200 + centerY;
-      const opacity = (Math.sin(time + i) + 1) * 0.15;
-      
-      // Ghost body
-      const ghostGradient = ctx.createRadialGradient(x, y, 0, x, y, 40);
-      ghostGradient.addColorStop(0, `rgba(200, 200, 255, ${opacity})`);
-      ghostGradient.addColorStop(1, 'transparent');
-      
-      ctx.fillStyle = ghostGradient;
-      ctx.beginPath();
-      ctx.arc(x, y, 35, 0, Math.PI * 2);
-      ctx.fill();
-      
-      // Ghost trail
-      for (let j = 1; j < 8; j++) {
-        const trailX = x - Math.sin(time * 0.2 + i * 1.2) * j * 8;
-        const trailY = y - Math.cos(time * 0.15 + i * 0.8) * j * 6;
-        const trailOpacity = opacity * (1 - j * 0.15);
-        
-        ctx.fillStyle = `rgba(150, 150, 200, ${trailOpacity})`;
-        ctx.beginPath();
-        ctx.arc(trailX, trailY, 35 - j * 3, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-    
-    // Eerie floating orbs
-    for (let i = 0; i < 12; i++) {
-      const x = Math.sin(time * 0.4 + i * 0.5) * 300 + centerX;
-      const y = Math.cos(time * 0.3 + i * 0.7) * 250 + centerY;
-      const pulse = Math.sin(time * 4 + i) * 0.5 + 0.5;
-      
-      ctx.fillStyle = `rgba(100, 0, 200, ${pulse * 0.6})`;
-      ctx.shadowBlur = 20;
-      ctx.shadowColor = '#6600cc';
-      ctx.beginPath();
-      ctx.arc(x, y, 4 + pulse * 3, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.shadowBlur = 0;
-    }
+  const handleFileSelect = useCallback((file: File) => {
+    if (!file.type.startsWith("image/")) return;
+    setFormFile(file);
+    const reader = new FileReader();
+    reader.onloadend = () => setFormPreview(reader.result as string);
+    reader.readAsDataURL(file);
+  }, []);
+
+  const resetForm = () => {
+    setFormDate(format(new Date(), "yyyy-MM-dd"));
+    setFormPnl("");
+    setFormInstrument("OPTIONS");
+    setFormNotes("");
+    setFormFile(null);
+    setFormPreview(null);
+    setIsDragging(false);
   };
 
-  const effects = [
-    { id: "aesthetic", name: "Aesthetic Vibes", icon: Palette },
-    { id: "dreamy", name: "Dreamy Gradients", icon: Camera },
-    { id: "neon", name: "Neon City", icon: Music },
-    { id: "horror", name: "Horror Eyes", icon: Skull },
-    { id: "blood", name: "Blood Moon", icon: Flame },
-    { id: "shadow", name: "Shadow Realm", icon: Ghost },
-    { id: "aurora", name: "Aurora Dreams", icon: Star },
-    { id: "hearts", name: "Floating Hearts", icon: Heart },
-    { id: "flowers", name: "Floral Mandala", icon: Flower2 },
-    { id: "spiral", name: "Hypnotic Spiral", icon: Eye },
-    { id: "kaleidoscope", name: "Kaleidoscope", icon: Zap },
-  ];
-
+  /* ══════════════════ RENDER ══════════════════ */
   return (
-    <div className="min-h-screen relative overflow-hidden bg-black">
-      {/* Background Canvas */}
-      <canvas
-        ref={canvasRef}
-        className="absolute inset-0 w-full h-full z-0"
-        style={{ background: "radial-gradient(circle, #0a0a0f 0%, #000000 100%)" }}
-      />
+    <div className="darklab-page min-h-screen relative overflow-x-hidden">
+      {/* ── background layers ── */}
+      <div className="fixed inset-0 z-0 darklab-bg" />
+      <div className="fixed inset-0 z-[1] darklab-grid-overlay pointer-events-none" />
+      <div className="fixed inset-0 z-[2] darklab-scanlines pointer-events-none" />
 
-      {/* Control Panel */}
-      <div className="absolute top-6 left-6 z-50">
-        {!isMenuOpen ? (
-          // Collapsed Menu Button
-          <div className="flex flex-col gap-3">
-            <Button
-              onClick={() => setIsMenuOpen(true)}
-              className="btn-hero p-4 flex items-center gap-3 min-w-48"
+      {/* ── main content ── */}
+      <div className="relative z-10 max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-20">
+
+        {/* ─────── HEADER ─────── */}
+        <motion.header
+          className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8"
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+        >
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => window.location.href = "/"}
+              className="p-2 rounded-lg bg-white/5 border border-cyan-500/20 hover:border-cyan-400/50
+                         hover:bg-cyan-500/10 transition-all duration-300 group"
+              title="Back to Portfolio"
             >
-              <Menu className="w-5 h-5" />
-              <div className="flex items-center gap-2">
-                {(() => {
-                  const currentEffect = getCurrentEffect();
-                  const Icon = currentEffect?.icon;
-                  return Icon ? <Icon className="w-4 h-4" /> : null;
-                })()}
-                <span>{getCurrentEffect()?.name}</span>
-              </div>
-            </Button>
-            
-            <Button
-              onClick={() => setIsPlaying(!isPlaying)}
-              className="btn-hero p-3 flex items-center gap-2"
-            >
-              {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-              {isPlaying ? "Pause" : "Play"}
-            </Button>
+              <ArrowLeft className="w-4 h-4 text-cyan-400 group-hover:text-cyan-300" />
+            </button>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
+              <span className="darklab-neon-text">DarkLab</span>
+              <span className="text-white/40 mx-2">//</span>
+              <span className="text-white/90">Verified Trading Journal.</span>
+            </h1>
           </div>
-        ) : (
-          // Expanded Menu
-          <Card className="glass-card p-6 backdrop-blur-xl bg-black/90 border border-white/30 shadow-2xl">
-            <div className="flex items-center justify-between mb-4">
-              <h1 className="text-xl font-bold gradient-text">
-                🌀 DARK LAB 🌀
-              </h1>
-              <Button
-                onClick={() => setIsMenuOpen(false)}
-                variant="ghost"
-                size="sm"
-                className="text-white/70 hover:text-white"
+          <div className="flex items-center gap-2">
+            {isOwner ? (
+              <div className="flex items-center gap-2">
+                {isOwner && (
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-full
+                                  border border-emerald-500/30 bg-emerald-500/5 backdrop-blur-sm">
+                    <Lock className="w-3 h-3 text-emerald-400" />
+                    <span className="text-[10px] font-semibold text-emerald-300 tracking-wider uppercase">
+                      Owner
+                    </span>
+                  </div>
+                )}
+                <button
+                  onClick={handleSignOut}
+                  className="flex items-center gap-2 px-3 py-2 rounded-full
+                             border border-red-500/20 bg-red-500/5 hover:bg-red-500/10
+                             hover:border-red-500/40 transition-all duration-300 backdrop-blur-sm"
+                >
+                  <LogOut className="w-3 h-3 text-red-400" />
+                  <span className="text-[10px] font-semibold text-red-300 tracking-wider uppercase">
+                    Sign Out
+                  </span>
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowAuthModal(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-full
+                           border border-cyan-500/30 bg-cyan-500/5 hover:bg-cyan-500/10
+                           hover:border-cyan-400/50 transition-all duration-300 backdrop-blur-sm"
               >
-                <X className="w-4 h-4" />
-              </Button>
-            </div>
-            
-            <div className="space-y-2 mb-4 max-h-80 overflow-y-auto">
-              {effects.map((effect) => {
-                const Icon = effect.icon;
-                return (
-                  <Button
-                    key={effect.id}
-                    onClick={() => handleEffectSelect(effect.id)}
-                    variant={activeEffect === effect.id ? "default" : "outline"}
-                    className={`w-full justify-start gap-2 text-sm ${
-                      activeEffect === effect.id 
-                        ? "btn-hero" 
-                        : "glass-card-hover border-primary/30 bg-black/60 hover:bg-black/80"
-                    }`}
-                  >
-                    <Icon className="w-4 h-4" />
-                    {effect.name}
-                  </Button>
-                );
-              })}
-            </div>
+                <LogIn className="w-3.5 h-3.5 text-cyan-400" />
+                <span className="text-xs font-semibold text-cyan-300 tracking-wider uppercase">
+                  Sign In to Manage
+                </span>
+              </button>
+            )}
+          </div>
+        </motion.header>
 
-            <div className="flex gap-2">
-              <Button
-                onClick={() => setIsPlaying(!isPlaying)}
-                className="btn-hero flex-1"
-              >
-                {isPlaying ? <Pause className="w-4 h-4 mr-2" /> : <Play className="w-4 h-4 mr-2" />}
-                {isPlaying ? "Pause" : "Play"}
-              </Button>
+        {/* ─────── STATS BAR ─────── */}
+        <motion.div
+          className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.1 }}
+        >
+          <StatCard
+            icon={<BarChart3 className="w-4 h-4" />}
+            label="Total Trades"
+            value={stats.total.toString()}
+            accent="cyan"
+          />
+          <StatCard
+            icon={stats.totalPnl >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+            label="Net P&L"
+            value={formatPnl(stats.totalPnl)}
+            accent={stats.totalPnl >= 0 ? "green" : "red"}
+          />
+          <StatCard
+            icon={<Target className="w-4 h-4" />}
+            label="Win Rate"
+            value={`${stats.winRate.toFixed(1)}%`}
+            accent={stats.winRate >= 50 ? "green" : "red"}
+          />
+          <StatCard
+            icon={<TrendingUp className="w-4 h-4" />}
+            label="Best Day"
+            value={formatPnl(stats.bestDay)}
+            accent="green"
+          />
+        </motion.div>
+
+        {/* ─────── SEARCH + ACTIONS ─────── */}
+        <motion.div
+          className="darklab-container p-4 sm:p-5 mb-8"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.2 }}
+        >
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+            {/* Search input */}
+            <div className="flex-1 relative group">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-cyan-500/60
+                                 group-focus-within:text-cyan-400 transition-colors" />
+              <input
+                type="text"
+                placeholder="Search Month, Day, Week..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-11 pr-4 py-3 rounded-xl bg-black/40 border border-cyan-500/20
+                           text-white/90 placeholder-white/30 text-sm
+                           focus:outline-none focus:border-cyan-400/60 focus:ring-1 focus:ring-cyan-400/30
+                           transition-all duration-300"
+              />
             </div>
-          </Card>
+            {/* Calendar icon */}
+            <button className="p-3 rounded-xl bg-black/40 border border-cyan-500/20
+                               hover:border-cyan-400/50 hover:bg-cyan-500/10
+                               transition-all duration-300">
+              <Calendar className="w-5 h-5 text-cyan-400" />
+            </button>
+            {/* Add trade button — owner only */}
+            {isOwner && (
+              <button
+                onClick={() => setIsUploadOpen(true)}
+                className="darklab-add-btn flex items-center justify-center gap-2 px-6 py-3 rounded-xl
+                           font-semibold text-sm transition-all duration-300"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add Trade</span>
+              </button>
+            )}
+          </div>
+        </motion.div>
+
+        {/* ─────── CARDS GRID ─────── */}
+        {isLoading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="darklab-card-skeleton rounded-xl h-64 animate-pulse" />
+            ))}
+          </div>
+        ) : paginatedEntries.length === 0 ? (
+          <motion.div
+            className="darklab-container p-12 sm:p-20 text-center"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+          >
+            <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl
+                            bg-cyan-500/10 border border-cyan-500/20 mb-6">
+              <ImageIcon className="w-8 h-8 text-cyan-500/60" />
+            </div>
+            <h3 className="text-xl font-semibold text-white/80 mb-2">No trades yet</h3>
+            <p className="text-white/40 text-sm mb-6 max-w-md mx-auto">
+              Start documenting your trading journey. Upload your first Groww P&L screenshot
+              and track your options trading performance.
+            </p>
+            {isOwner && (
+              <button
+                onClick={() => setIsUploadOpen(true)}
+                className="darklab-add-btn inline-flex items-center gap-2 px-6 py-3 rounded-xl
+                           font-semibold text-sm transition-all duration-300"
+              >
+                <Plus className="w-4 h-4" />
+                Upload First Trade
+              </button>
+            )}
+          </motion.div>
+        ) : (
+          <motion.div
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.4, delay: 0.3 }}
+          >
+            {paginatedEntries.map((entry, i) => {
+              const pnl = Number(entry.pnl_amount);
+              const isProfit = pnl >= 0;
+              const date = new Date(entry.trade_date + "T00:00:00");
+
+              return (
+                <motion.div
+                  key={entry.id}
+                  className={`darklab-trade-card group relative rounded-xl overflow-hidden cursor-pointer
+                    ${isProfit ? "darklab-card-profit" : "darklab-card-loss"}`}
+                  initial={{ opacity: 0, y: 30, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ duration: 0.4, delay: i * 0.05 }}
+                  whileHover={{ scale: 1.03, y: -4 }}
+                  onClick={() => setSelectedImage(entry.screenshot_url)}
+                  layout
+                >
+                  {/* Neon border glow overlay */}
+                  <div className={`absolute inset-0 rounded-xl z-0 pointer-events-none
+                    ${isProfit ? "darklab-glow-green" : "darklab-glow-red"}`}
+                  />
+
+                  {/* View icon on hover */}
+                  <div className="absolute inset-0 z-10 flex items-center justify-center
+                                  bg-black/0 group-hover:bg-black/40 transition-all duration-300">
+                    <Eye className="w-8 h-8 text-white/0 group-hover:text-white/80
+                                    transition-all duration-300 transform scale-50 group-hover:scale-100" />
+                  </div>
+
+                  {/* Delete button — owner only */}
+                  {isOwner && (
+                    <button
+                      className="absolute top-2.5 right-2.5 z-20 opacity-0 group-hover:opacity-100
+                                 p-1.5 rounded-lg bg-red-500/80 hover:bg-red-500 backdrop-blur-sm
+                                 transition-all duration-200 transform translate-y-1 group-hover:translate-y-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeleteConfirm(entry.id);
+                      }}
+                    >
+                      <Trash2 className="w-3 h-3 text-white" />
+                    </button>
+                  )}
+
+                  {/* Screenshot */}
+                  <div className="relative h-44 overflow-hidden">
+                    <img
+                      src={entry.screenshot_url}
+                      alt={`Trade ${format(date, "MMM dd")}`}
+                      className="w-full h-full object-cover transition-transform duration-500
+                                 group-hover:scale-110"
+                      loading="lazy"
+                    />
+                    {/* Gradient overlay at bottom of image */}
+                    <div className="absolute bottom-0 left-0 right-0 h-16
+                                    bg-gradient-to-t from-[#0a0a14] to-transparent" />
+                  </div>
+
+                  {/* Info bar */}
+                  <div className="relative z-10 flex items-center justify-between px-3.5 py-3
+                                  bg-[#0a0a14]/90 backdrop-blur-sm">
+                    {/* Date badge */}
+                    <div
+                      className={`flex flex-col items-center justify-center w-12 h-12 rounded-lg
+                        ${isProfit
+                          ? "bg-emerald-500/15 border border-emerald-500/30 text-emerald-400"
+                          : "bg-red-500/15 border border-red-500/30 text-red-400"
+                        }`}
+                    >
+                      <span className="text-[10px] font-bold uppercase leading-none tracking-wider">
+                        {format(date, "MMM")}
+                      </span>
+                      <span className="text-lg font-black leading-none mt-0.5">
+                        {format(date, "dd")}
+                      </span>
+                    </div>
+                    {/* P&L */}
+                    <span
+                      className={`text-sm font-bold font-mono tracking-wide
+                        ${isProfit ? "text-emerald-400" : "text-red-400"}`}
+                    >
+                      {formatPnl(pnl)}
+                    </span>
+                  </div>
+
+                  {/* Instrument tag */}
+                  {entry.instrument && (
+                    <div className="absolute top-2.5 left-2.5 z-10 px-2 py-0.5 rounded-md
+                                    bg-black/60 backdrop-blur-sm border border-white/10
+                                    text-[10px] font-semibold text-white/60 uppercase tracking-wider
+                                    opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                      {entry.instrument}
+                    </div>
+                  )}
+                </motion.div>
+              );
+            })}
+          </motion.div>
+        )}
+
+        {/* ─────── PAGINATION ─────── */}
+        {totalPages > 1 && (
+          <motion.div
+            className="flex items-center justify-center gap-3 mt-10"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.5 }}
+          >
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="p-2.5 rounded-lg border border-cyan-500/30 bg-cyan-500/5
+                         hover:bg-cyan-500/15 hover:border-cyan-400/50
+                         disabled:opacity-30 disabled:cursor-not-allowed
+                         transition-all duration-300"
+            >
+              <ChevronLeft className="w-4 h-4 text-cyan-400" />
+            </button>
+            <div className="flex items-center gap-2 px-4 py-2 rounded-lg
+                            border border-cyan-500/20 bg-black/30">
+              <span className="text-white/50 text-sm">Page</span>
+              <span className="text-cyan-400 font-bold text-sm min-w-[1.5rem] text-center">
+                {currentPage}
+              </span>
+              <span className="text-white/50 text-sm">of {totalPages}</span>
+            </div>
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="p-2.5 rounded-lg border border-cyan-500/30 bg-cyan-500/5
+                         hover:bg-cyan-500/15 hover:border-cyan-400/50
+                         disabled:opacity-30 disabled:cursor-not-allowed
+                         transition-all duration-300"
+            >
+              <ChevronRight className="w-4 h-4 text-cyan-400" />
+            </button>
+          </motion.div>
         )}
       </div>
 
-      {/* Info Panel */}
-      <div className="absolute bottom-6 right-6 z-50">
-        <Card className="glass-card p-4 backdrop-blur-xl bg-black/80 border border-white/20 max-w-xs shadow-2xl">
-          <h3 className="text-lg font-semibold text-primary mb-2">⚠️ WARNING ⚠️</h3>
-          <p className="text-sm text-white/80">
-            These effects may cause dizziness or discomfort. 
-            Take breaks if needed. Not recommended for those with epilepsy.
-          </p>
-        </Card>
-      </div>
+      {/* ═══════════ UPLOAD MODAL ═══════════ */}
+      <AnimatePresence>
+        {isUploadOpen && (
+          <motion.div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            {/* Backdrop */}
+            <motion.div
+              className="absolute inset-0 bg-black/70 backdrop-blur-md"
+              onClick={() => { setIsUploadOpen(false); resetForm(); }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            />
 
-      {/* Floating Elements */}
-      <div className="absolute top-20 right-20 text-primary/40 floating z-40">
-        <Eye className="w-8 h-8" />
-      </div>
-      <div className="absolute bottom-20 left-20 text-secondary/40 floating-delayed z-40">
-        <Sparkles className="w-10 h-10" />
-      </div>
+            {/* Modal */}
+            <motion.div
+              className="relative w-full max-w-lg darklab-modal rounded-2xl p-6 sm:p-8 overflow-y-auto max-h-[90vh]"
+              initial={{ opacity: 0, scale: 0.9, y: 30 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 30 }}
+              transition={{ type: "spring", damping: 25 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Close button */}
+              <button
+                onClick={() => { setIsUploadOpen(false); resetForm(); }}
+                className="absolute top-4 right-4 p-2 rounded-lg hover:bg-white/10 transition-colors"
+              >
+                <X className="w-4 h-4 text-white/60" />
+              </button>
 
-      {/* Secret Message */}
-      <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-0 opacity-5">
-        <h2 className="text-6xl font-bold text-white">
-          ENTER THE VOID
-        </h2>
+              <h2 className="text-xl font-bold text-white mb-1">
+                <span className="darklab-neon-text">New</span> Trade Entry
+              </h2>
+              <p className="text-white/40 text-sm mb-6">
+                Upload your Groww P&L screenshot for today's trade.
+              </p>
+
+              <form onSubmit={handleUpload} className="space-y-5">
+                {/* Date + P&L row */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-white/50 uppercase tracking-wider mb-2">
+                      Trade Date
+                    </label>
+                    <input
+                      type="date"
+                      value={formDate}
+                      onChange={(e) => setFormDate(e.target.value)}
+                      className="darklab-input w-full"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-white/50 uppercase tracking-wider mb-2">
+                      P&L Amount (₹)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={formPnl}
+                      onChange={(e) => setFormPnl(e.target.value)}
+                      placeholder="+1240.50 or -315.20"
+                      className="darklab-input w-full"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Instrument */}
+                <div>
+                  <label className="block text-xs font-semibold text-white/50 uppercase tracking-wider mb-2">
+                    Instrument
+                  </label>
+                  <input
+                    type="text"
+                    value={formInstrument}
+                    onChange={(e) => setFormInstrument(e.target.value)}
+                    placeholder="OPTIONS, FUTURES, EQUITY..."
+                    className="darklab-input w-full"
+                  />
+                </div>
+
+                {/* Screenshot upload */}
+                <div>
+                  <label className="block text-xs font-semibold text-white/50 uppercase tracking-wider mb-2">
+                    Screenshot
+                  </label>
+                  <div
+                    className={`darklab-dropzone relative rounded-xl border-2 border-dashed
+                      transition-all duration-300 cursor-pointer overflow-hidden
+                      ${isDragging
+                        ? "border-cyan-400 bg-cyan-500/10"
+                        : formPreview
+                          ? "border-emerald-500/40 bg-emerald-500/5"
+                          : "border-white/15 hover:border-cyan-500/40 hover:bg-cyan-500/5"
+                      }`}
+                    onClick={() => fileInputRef.current?.click()}
+                    onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                    onDragLeave={() => setIsDragging(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setIsDragging(false);
+                      const file = e.dataTransfer.files[0];
+                      if (file) handleFileSelect(file);
+                    }}
+                  >
+                    {formPreview ? (
+                      <div className="relative">
+                        <img
+                          src={formPreview}
+                          alt="Preview"
+                          className="w-full h-48 object-cover rounded-lg"
+                        />
+                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center
+                                        opacity-0 hover:opacity-100 transition-opacity rounded-lg">
+                          <span className="text-white text-sm font-medium">Click to change</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center py-10 px-6">
+                        <div className="w-14 h-14 rounded-xl bg-cyan-500/10 border border-cyan-500/20
+                                        flex items-center justify-center mb-4">
+                          <Upload className="w-6 h-6 text-cyan-500/60" />
+                        </div>
+                        <p className="text-white/60 text-sm font-medium mb-1">
+                          Drop screenshot here or click to browse
+                        </p>
+                        <p className="text-white/30 text-xs">
+                          PNG, JPG, WEBP up to 10MB
+                        </p>
+                      </div>
+                    )}
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleFileSelect(file);
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Notes */}
+                <div>
+                  <label className="block text-xs font-semibold text-white/50 uppercase tracking-wider mb-2">
+                    Notes <span className="text-white/30">(optional)</span>
+                  </label>
+                  <textarea
+                    value={formNotes}
+                    onChange={(e) => setFormNotes(e.target.value)}
+                    placeholder="What did you learn from this trade?"
+                    className="darklab-input w-full h-20 resize-none"
+                    rows={3}
+                  />
+                </div>
+
+                {/* Submit */}
+                <button
+                  type="submit"
+                  disabled={!formFile || !formPnl || isUploading}
+                  className="darklab-add-btn w-full py-3.5 rounded-xl font-bold text-sm
+                             flex items-center justify-center gap-2
+                             disabled:opacity-40 disabled:cursor-not-allowed
+                             transition-all duration-300"
+                >
+                  {isUploading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-4 h-4" />
+                      Upload Trade
+                    </>
+                  )}
+                </button>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ═══════════ DELETE CONFIRM ═══════════ */}
+      <AnimatePresence>
+        {deleteConfirm && (
+          <motion.div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              onClick={() => setDeleteConfirm(null)}
+            />
+            <motion.div
+              className="relative darklab-modal rounded-2xl p-6 max-w-sm w-full text-center"
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+            >
+              <div className="w-14 h-14 rounded-full bg-red-500/15 border border-red-500/30
+                              flex items-center justify-center mx-auto mb-4">
+                <Trash2 className="w-6 h-6 text-red-400" />
+              </div>
+              <h3 className="text-lg font-bold text-white mb-2">Delete Trade?</h3>
+              <p className="text-white/40 text-sm mb-6">
+                This action cannot be undone. The trade entry and screenshot will be permanently removed.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setDeleteConfirm(null)}
+                  className="flex-1 py-2.5 rounded-xl border border-white/15 text-white/60
+                             hover:bg-white/5 text-sm font-medium transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleDelete(deleteConfirm)}
+                  className="flex-1 py-2.5 rounded-xl bg-red-500/20 border border-red-500/40
+                             text-red-400 hover:bg-red-500/30 text-sm font-bold transition-all"
+                >
+                  Delete
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ═══════════ IMAGE LIGHTBOX ═══════════ */}
+      <AnimatePresence>
+        {selectedImage && (
+          <motion.div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 cursor-zoom-out"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setSelectedImage(null)}
+          >
+            <div className="absolute inset-0 bg-black/85 backdrop-blur-lg" />
+            <motion.img
+              src={selectedImage}
+              alt="Trade screenshot"
+              className="relative z-10 max-w-full max-h-[85vh] rounded-xl shadow-2xl
+                         border border-white/10 object-contain"
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              transition={{ type: "spring", damping: 25 }}
+            />
+            <button
+              className="absolute top-6 right-6 z-20 p-3 rounded-full bg-white/10
+                         hover:bg-white/20 backdrop-blur-sm transition-all"
+              onClick={() => setSelectedImage(null)}
+            >
+              <X className="w-5 h-5 text-white" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ═══════════ SIGN-IN MODAL ═══════════ */}
+      <AnimatePresence>
+        {showAuthModal && (
+          <motion.div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              className="absolute inset-0 bg-black/70 backdrop-blur-md"
+              onClick={() => { setShowAuthModal(false); resetAuthForm(); }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            />
+            <motion.div
+              className="relative w-full max-w-sm darklab-modal rounded-2xl p-6 sm:p-8 text-center"
+              initial={{ opacity: 0, scale: 0.9, y: 30 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 30 }}
+              transition={{ type: "spring", damping: 25 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                onClick={() => { setShowAuthModal(false); resetAuthForm(); }}
+                className="absolute top-4 right-4 p-2 rounded-lg hover:bg-white/10 transition-colors"
+              >
+                <X className="w-4 h-4 text-white/60" />
+              </button>
+
+              {otpSent ? (
+                <>
+                  <div className="w-16 h-16 rounded-2xl bg-emerald-500/15 border border-emerald-500/30
+                                  flex items-center justify-center mx-auto mb-5">
+                    <Mail className="w-7 h-7 text-emerald-400" />
+                  </div>
+                  <h2 className="text-xl font-bold text-white mb-2">Enter OTP</h2>
+                  <p className="text-white/40 text-sm mb-5 leading-relaxed">
+                    OTP sent to<br />
+                    <span className="text-cyan-400 font-medium">{authEmail}</span>
+                  </p>
+
+                  {otpMessage && (
+                    <p className={`text-xs mb-4 px-3 py-2 rounded-lg ${
+                      otpMessage.toLowerCase().includes("denied") || otpMessage.toLowerCase().includes("invalid") || otpMessage.toLowerCase().includes("expired") || otpMessage.toLowerCase().includes("fail")
+                        ? "bg-red-500/10 border border-red-500/20 text-red-400"
+                        : "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
+                    }`}>
+                      {otpMessage}
+                    </p>
+                  )}
+
+                  <form onSubmit={handleVerifyOtp} className="space-y-4">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={5}
+                      value={otpValue}
+                      onChange={(e) => setOtpValue(e.target.value.replace(/\D/g, "").slice(0, 5))}
+                      placeholder="Enter 5-digit OTP"
+                      className="darklab-input w-full text-center text-xl font-bold tracking-[0.5em] py-4"
+                      required
+                      autoFocus
+                    />
+                    <button
+                      type="submit"
+                      disabled={authLoading || otpValue.length !== 5}
+                      className="darklab-add-btn w-full py-3 rounded-xl font-bold text-sm
+                                 flex items-center justify-center gap-2
+                                 disabled:opacity-40 disabled:cursor-not-allowed
+                                 transition-all duration-300"
+                    >
+                      {authLoading ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Verifying...
+                        </>
+                      ) : (
+                        <>
+                          <Lock className="w-4 h-4" />
+                          Verify OTP
+                        </>
+                      )}
+                    </button>
+                  </form>
+
+                  <button
+                    onClick={() => { setOtpSent(false); setOtpValue(""); setOtpMessage(""); }}
+                    className="mt-4 text-cyan-400 text-sm hover:text-cyan-300 transition-colors underline
+                               underline-offset-4"
+                  >
+                    Use a different email
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="w-16 h-16 rounded-2xl bg-cyan-500/15 border border-cyan-500/30
+                                  flex items-center justify-center mx-auto mb-5">
+                    <Lock className="w-7 h-7 text-cyan-400" />
+                  </div>
+                  <h2 className="text-xl font-bold text-white mb-1">
+                    <span className="darklab-neon-text">Owner</span> Sign In
+                  </h2>
+                  <p className="text-white/40 text-sm mb-6">
+                    Sign in with your email to manage trades.
+                  </p>
+
+                  {otpMessage && (
+                    <p className="text-xs mb-4 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400">
+                      {otpMessage}
+                    </p>
+                  )}
+
+                  <form onSubmit={handleSendOtp} className="space-y-4">
+                    <input
+                      type="email"
+                      value={authEmail}
+                      onChange={(e) => setAuthEmail(e.target.value)}
+                      placeholder="Enter your email"
+                      className="darklab-input w-full text-center"
+                      required
+                      autoFocus
+                    />
+                    <button
+                      type="submit"
+                      disabled={authLoading || !authEmail}
+                      className="darklab-add-btn w-full py-3 rounded-xl font-bold text-sm
+                                 flex items-center justify-center gap-2
+                                 disabled:opacity-40 disabled:cursor-not-allowed
+                                 transition-all duration-300"
+                    >
+                      {authLoading ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Sending...
+                        </>
+                      ) : (
+                        <>
+                          <Mail className="w-4 h-4" />
+                          Send OTP
+                        </>
+                      )}
+                    </button>
+                  </form>
+                </>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+/* ─────── Stat Card Sub-component ─────── */
+const StatCard = ({
+  icon,
+  label,
+  value,
+  accent,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  accent: "cyan" | "green" | "red";
+}) => {
+  const accentMap = {
+    cyan: {
+      border: "border-cyan-500/20",
+      bg: "bg-cyan-500/5",
+      iconBg: "bg-cyan-500/15",
+      iconColor: "text-cyan-400",
+      valueColor: "text-cyan-300",
+    },
+    green: {
+      border: "border-emerald-500/20",
+      bg: "bg-emerald-500/5",
+      iconBg: "bg-emerald-500/15",
+      iconColor: "text-emerald-400",
+      valueColor: "text-emerald-300",
+    },
+    red: {
+      border: "border-red-500/20",
+      bg: "bg-red-500/5",
+      iconBg: "bg-red-500/15",
+      iconColor: "text-red-400",
+      valueColor: "text-red-300",
+    },
+  };
+
+  const a = accentMap[accent];
+
+  return (
+    <div className={`rounded-xl ${a.border} ${a.bg} border backdrop-blur-sm p-4
+                     hover:scale-[1.02] transition-transform duration-300`}>
+      <div className="flex items-center gap-2.5 mb-2">
+        <div className={`p-1.5 rounded-lg ${a.iconBg} ${a.iconColor}`}>
+          {icon}
+        </div>
+        <span className="text-[11px] font-semibold text-white/40 uppercase tracking-wider">
+          {label}
+        </span>
       </div>
+      <p className={`text-lg font-bold font-mono ${a.valueColor}`}>{value}</p>
     </div>
   );
 };

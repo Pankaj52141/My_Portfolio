@@ -41,6 +41,36 @@ export type Database = {
         }
         Relationships: []
       }
+      trading_journal: {
+        Row: {
+          id: string
+          trade_date: string
+          screenshot_url: string
+          pnl_amount: number
+          instrument: string | null
+          notes: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          trade_date: string
+          screenshot_url: string
+          pnl_amount: number
+          instrument?: string | null
+          notes?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          trade_date?: string
+          screenshot_url?: string
+          pnl_amount?: number
+          instrument?: string | null
+          notes?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

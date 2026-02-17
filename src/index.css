@@ -246,3 +246,233 @@ All colors MUST be HSL.
     box-shadow: var(--shadow-medium);
   }
 }
+
+/* ═══════════════════════════════════════════════
+   DARKLAB - Trading Journal Styles
+   ═══════════════════════════════════════════════ */
+
+/* Background base */
+.darklab-bg {
+  background-color: #050510;
+  background-image:
+    radial-gradient(ellipse at 15% 30%, rgba(0, 240, 255, 0.04) 0%, transparent 50%),
+    radial-gradient(ellipse at 85% 15%, rgba(0, 180, 255, 0.03) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 85%, rgba(0, 100, 255, 0.03) 0%, transparent 50%),
+    radial-gradient(ellipse at 70% 60%, rgba(0, 240, 255, 0.02) 0%, transparent 40%);
+}
+
+/* Grid pattern overlay */
+.darklab-grid-overlay {
+  background-image:
+    linear-gradient(rgba(0, 240, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 240, 255, 0.03) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
+  -webkit-mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
+}
+
+/* Scanline effect */
+.darklab-scanlines::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 3px,
+    rgba(0, 0, 0, 0.015) 3px,
+    rgba(0, 0, 0, 0.015) 6px
+  );
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Override body background for darklab page */
+.darklab-page {
+  background: transparent !important;
+}
+
+/* Neon cyan text */
+.darklab-neon-text {
+  color: #00e5ff;
+  text-shadow:
+    0 0 7px rgba(0, 229, 255, 0.6),
+    0 0 20px rgba(0, 229, 255, 0.3),
+    0 0 42px rgba(0, 229, 255, 0.15);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+/* General container */
+.darklab-container {
+  background: rgba(10, 10, 20, 0.6);
+  border: 1px solid rgba(0, 229, 255, 0.12);
+  border-radius: 16px;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+/* Trade card base */
+.darklab-trade-card {
+  background: #0a0a14;
+  border: 1.5px solid transparent;
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Profit card */
+.darklab-card-profit {
+  border-color: rgba(16, 185, 129, 0.35);
+  box-shadow:
+    0 0 12px rgba(16, 185, 129, 0.15),
+    inset 0 0 12px rgba(16, 185, 129, 0.03);
+}
+.darklab-card-profit:hover {
+  border-color: rgba(16, 185, 129, 0.6);
+  box-shadow:
+    0 0 24px rgba(16, 185, 129, 0.25),
+    0 0 48px rgba(16, 185, 129, 0.1),
+    inset 0 0 20px rgba(16, 185, 129, 0.05);
+}
+
+/* Loss card */
+.darklab-card-loss {
+  border-color: rgba(239, 68, 68, 0.35);
+  box-shadow:
+    0 0 12px rgba(239, 68, 68, 0.15),
+    inset 0 0 12px rgba(239, 68, 68, 0.03);
+}
+.darklab-card-loss:hover {
+  border-color: rgba(239, 68, 68, 0.6);
+  box-shadow:
+    0 0 24px rgba(239, 68, 68, 0.25),
+    0 0 48px rgba(239, 68, 68, 0.1),
+    inset 0 0 20px rgba(239, 68, 68, 0.05);
+}
+
+/* Glow overlays (inner border glow) */
+.darklab-glow-green {
+  box-shadow: inset 0 0 30px rgba(16, 185, 129, 0.08);
+}
+.darklab-glow-red {
+  box-shadow: inset 0 0 30px rgba(239, 68, 68, 0.08);
+}
+
+/* Skeleton loader */
+.darklab-card-skeleton {
+  background: linear-gradient(
+    110deg,
+    rgba(10, 10, 20, 0.8) 8%,
+    rgba(0, 229, 255, 0.04) 18%,
+    rgba(10, 10, 20, 0.8) 33%
+  );
+  background-size: 200% 100%;
+  animation: darklab-shimmer 1.5s linear infinite;
+  border: 1px solid rgba(0, 229, 255, 0.08);
+}
+
+@keyframes darklab-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Add trade button */
+.darklab-add-btn {
+  background: linear-gradient(135deg, rgba(0, 229, 255, 0.15), rgba(0, 180, 255, 0.1));
+  border: 1px solid rgba(0, 229, 255, 0.4);
+  color: #00e5ff;
+  position: relative;
+  overflow: hidden;
+}
+.darklab-add-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(0, 229, 255, 0.25), rgba(0, 180, 255, 0.15));
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.darklab-add-btn:hover::before {
+  opacity: 1;
+}
+.darklab-add-btn:hover {
+  border-color: rgba(0, 229, 255, 0.7);
+  box-shadow:
+    0 0 20px rgba(0, 229, 255, 0.2),
+    0 0 40px rgba(0, 229, 255, 0.1);
+  transform: translateY(-1px);
+}
+.darklab-add-btn > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Modal */
+.darklab-modal {
+  background: rgba(12, 12, 22, 0.95);
+  border: 1px solid rgba(0, 229, 255, 0.15);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  box-shadow:
+    0 0 40px rgba(0, 0, 0, 0.5),
+    0 0 80px rgba(0, 229, 255, 0.05);
+}
+
+/* Form inputs */
+.darklab-input {
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.875rem;
+  outline: none;
+  transition: all 0.3s;
+}
+.darklab-input::placeholder {
+  color: rgba(255, 255, 255, 0.25);
+}
+.darklab-input:focus {
+  border-color: rgba(0, 229, 255, 0.5);
+  box-shadow: 0 0 0 3px rgba(0, 229, 255, 0.1);
+}
+
+/* Date input color scheme */
+.darklab-input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.7) sepia(1) saturate(5) hue-rotate(165deg);
+  cursor: pointer;
+}
+
+/* Custom scrollbar for darklab page */
+.darklab-page::-webkit-scrollbar {
+  width: 6px;
+}
+.darklab-page::-webkit-scrollbar-track {
+  background: transparent;
+}
+.darklab-page::-webkit-scrollbar-thumb {
+  background: rgba(0, 229, 255, 0.15);
+  border-radius: 3px;
+}
+.darklab-page::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 229, 255, 0.3);
+}
+
+/* Neon pulse animation for header text */
+@keyframes darklab-neon-pulse {
+  0%, 100% {
+    text-shadow:
+      0 0 7px rgba(0, 229, 255, 0.6),
+      0 0 20px rgba(0, 229, 255, 0.3),
+      0 0 42px rgba(0, 229, 255, 0.15);
+  }
+  50% {
+    text-shadow:
+      0 0 10px rgba(0, 229, 255, 0.8),
+      0 0 28px rgba(0, 229, 255, 0.5),
+      0 0 56px rgba(0, 229, 255, 0.25);
+  }
+}
+
+.darklab-neon-text {
+  animation: darklab-neon-pulse 3s ease-in-out infinite;
+}

@@ -9,7 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 
 const ContactSection = () => {
   // Use environment variable for API base URL
-  const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/';
+  const apiBaseUrl = import.meta.env.VITE_API_URL || '';
   const [formData, setFormData] = useState({
     name: '',
     email: '',
